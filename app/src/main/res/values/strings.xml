@@ -10,5 +10,5 @@
     <string name="similar_search">相似图片搜索</string>
     <string name="settings">设置</string>
     <string name="indexing">索引中...</string>
-    <string name="indexing_progress">正在处理 %d/%d 张图片</string>
+    <string name="indexing_progress">正在处理 %1$d/%2$d 张图片</string>
 </resources>
