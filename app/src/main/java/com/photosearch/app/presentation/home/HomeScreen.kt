@@ -1,5 +1,7 @@
 package com.photosearch.app.presentation.home
 
+import android.Manifest
+import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -12,17 +14,24 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.photosearch.app.data.model.SearchResult
+import com.photosearch.app.service.IndexingService
+import com.photosearch.app.service.IndexingState
+import com.photosearch.app.utils.PermissionUtils
 
 /**
  * 首页界面
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
@@ -30,14 +39,26 @@ fun HomeScreen(
     onNavigateToDuplicates: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {}
 ) {
-    val photos by viewModel.photos.collectAsState()
-    val searchResults by viewModel.searchResults.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val indexedCount by viewModel.indexedCount.collectAsState()
-    
+    val context = LocalContext.current
+    val photos by viewModel.photos.collectAsStateWithLifecycle()
+    val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val indexedCount by viewModel.indexedCount.collectAsStateWithLifecycle()
     val keyboardController = LocalSoftwareKeyboardController.current
-    
+
+    // 权限状态
+    val storagePermissions = rememberMultiplePermissionsState(
+        permissions = PermissionUtils.getStoragePermissions().toList()
+    )
+
+    // 索引进度
+    val indexingState by remember { IndexingService.globalState }.collectAsStateWithLifecycle()
+    val isIndexing = indexingState is IndexingState.Running
+
+    // 权限请求对话框
+    var showPermissionDialog by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -54,9 +75,30 @@ fun HomeScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { /* 启动索引服务 */ }
+                onClick = {
+                    if (!storagePermissions.allPermissionsGranted) {
+                        showPermissionDialog = true
+                    } else {
+                        val intent = Intent(context, IndexingService::class.java).apply {
+                            action = IndexingService.ACTION_START
+                        }
+                        context.startService(intent)
+                    }
+                },
+                containerColor = if (isIndexing) {
+                    MaterialTheme.colorScheme.secondary
+                } else {
+                    MaterialTheme.colorScheme.primary
+                }
             ) {
-                Icon(Icons.Default.Sync, contentDescription = "索引")
+                if (isIndexing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onSecondary
+                    )
+                } else {
+                    Icon(Icons.Default.Sync, contentDescription = "索引")
+                }
             }
         }
     ) { paddingValues ->
@@ -90,16 +132,32 @@ fun HomeScreen(
                 ),
                 singleLine = true
             )
-            
-            // 索引状态
-            if (indexedCount > 0) {
-                Text(
-                    text = "已索引 $indexedCount 张图片",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+
+            // 索引进度条
+            if (isIndexing) {
+                val state = indexingState as IndexingState.Running
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                    LinearProgressIndicator(
+                        progress = { state.current.toFloat() / state.total.toFloat() },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = "正在处理 ${state.current}/${state.total} 张图片",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            } else {
+                // 索引状态
+                if (indexedCount > 0) {
+                    Text(
+                        text = "已索引 $indexedCount 张图片",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
             }
-            
+
             // 搜索结果或图片列表
             if (isLoading) {
                 Box(
@@ -122,6 +180,30 @@ fun HomeScreen(
                 )
             }
         }
+    }
+
+    // 权限请求对话框
+    if (showPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showPermissionDialog = false },
+            title = { Text("需要权限") },
+            text = { Text("相册搜索需要访问您的相册权限来索引图片。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showPermissionDialog = false
+                        storagePermissions.launchMultiplePermissionRequest()
+                    }
+                ) {
+                    Text("授权")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }
 

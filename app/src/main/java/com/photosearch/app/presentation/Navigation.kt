@@ -1,16 +1,22 @@
 package com.photosearch.app.presentation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.photosearch.app.presentation.duplicate.DuplicatesScreen
 import com.photosearch.app.presentation.home.HomeScreen
+import com.photosearch.app.presentation.settings.SettingsScreen
+import com.photosearch.app.presentation.similar.SimilarImagesScreen
 
 sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Similar : Screen("similar/{imageUri}") {
-        fun createRoute(imageUri: String) = "similar/$imageUri"
+        fun createRoute(imageUri: String) = "similar/${Uri.encode(imageUri)}"
     }
     object Duplicates : Screen("duplicates")
     object Settings : Screen("settings")
@@ -18,11 +24,13 @@ sealed class Screen(val route: String) {
 
 @Composable
 fun PhotoSearchNavHost(
+    modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController()
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Home.route
+        startDestination = Screen.Home.route,
+        modifier = modifier
     ) {
         composable(Screen.Home.route) {
             HomeScreen(
@@ -37,26 +45,38 @@ fun PhotoSearchNavHost(
                 }
             )
         }
-        
-        composable(Screen.Similar.route) { backStackEntry ->
-            val imageUri = backStackEntry.arguments?.getString("imageUri") ?: ""
-            // SimilarImagesScreen(imageUri = imageUri)
-            Text("Similar Images: $imageUri")
+
+        composable(
+            route = Screen.Similar.route,
+            arguments = listOf(
+                navArgument("imageUri") {
+                    type = NavType.StringType
+                }
+            )
+        ) { backStackEntry ->
+            val imageUri = Uri.decode(backStackEntry.arguments?.getString("imageUri") ?: "")
+            SimilarImagesScreen(
+                imageUri = imageUri,
+                onBack = { navController.popBackStack() }
+            )
         }
-        
+
         composable(Screen.Duplicates.route) {
-            // DuplicatesScreen()
-            Text("Duplicates Screen")
+            DuplicatesScreen(
+                onBack = { navController.popBackStack() }
+            )
         }
-        
+
         composable(Screen.Settings.route) {
-            // SettingsScreen()
-            Text("Settings Screen")
+            SettingsScreen(
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 }
 
-@Composable
-fun Text(text: String) {
-    androidx.compose.material3.Text(text = text)
+// 简单的 Uri 编码/解码工具
+private object Uri {
+    fun encode(uri: String): String = java.net.URLEncoder.encode(uri, "UTF-8")
+    fun decode(uri: String): String = java.net.URLDecoder.decode(uri, "UTF-8")
 }

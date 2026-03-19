@@ -152,6 +152,11 @@ class PhotoSearchRepository @Inject constructor(
         imageFeatureDao.deleteByUri(uri)
     }
     
+    /**
+     * 获取所有已索引的 URI 列表
+     */
+    suspend fun getAllIndexedUris(): List<String> = imageFeatureDao.getAllIndexedUris()
+    
     // 转换方法
     private fun ImageFeatureEntity.toDomainModel(): ImageFeature {
         return ImageFeature(
