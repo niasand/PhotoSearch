@@ -63,7 +63,12 @@ jobs:
       - name: Prepare release assets
         id: assets
         run: |
-          FILES=$(find app/build/outputs/apk -name "app-*.apk" | xargs echo | sed 's/ /,/g')
+          if [ ! -d app/build/outputs/apk ]; then
+            ls -la app/build/outputs || true
+            echo "No APKs found in app/build/outputs/apk" >&2
+            exit 1
+          fi
+          FILES=$(find app/build/outputs/apk -type f -name "app-*.apk" | xargs echo | sed 's/ /,/g')
           if [ -z "$FILES" ]; then
             echo "No APKs found in app/build/outputs/apk" >&2
             exit 1
