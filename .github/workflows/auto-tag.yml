@@ -1,0 +1,39 @@
+name: Auto Tag
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git fetch --tags
+          commit_sha="$(git rev-parse HEAD)"
+          if git tag --points-at "$commit_sha" | grep -q .; then
+            exit 0
+          fi
+          latest_tag="$(git tag --list 'v*' --sort=-v:refname | head -n 1 || true)"
+          if [ -z "$latest_tag" ]; then
+            next_tag="v1.0.0"
+          else
+            version="${latest_tag#v}"
+            IFS='.' read -r major minor patch <<EOF
+$version
+EOF
+            patch=$((patch+1))
+            next_tag="v${major}.${minor}.${patch}"
+          fi
+          git tag "$next_tag"
+          git push origin "$next_tag"
