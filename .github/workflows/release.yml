@@ -12,9 +12,6 @@ jobs:
   build:
     name: Build APK
     runs-on: ubuntu-latest
-    env:
-      HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -49,27 +46,6 @@ jobs:
           name: photosearch-release-unsigned
           path: app/build/outputs/apk/release/app-release-unsigned.apk
 
-      - name: Decode keystore
-        if: env.HAS_KEYSTORE != ''
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/keystore.jks
-
-      - name: Build signed release APK
-        if: env.HAS_KEYSTORE != ''
-        env:
-          KEYSTORE_PATH: ${{ github.workspace }}/keystore.jks
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease
-
-      - name: Upload signed APK artifact
-        if: env.HAS_KEYSTORE != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: photosearch-release-signed
-          path: app/build/outputs/apk/release/app-release.apk
-
       # ── Create GitHub Release ──
       - name: Get version name
         id: version
@@ -103,7 +79,6 @@ jobs:
 
             ### Downloads
             - 📦 `app-debug.apk` — Debug build (未签名)
-            - 🔐 `app-release.apk` — Release build (已签名，如启用 keystore)
             - 📦 `app-release-unsigned.apk` — Release build (未签名)
           makeLatest: true
           allowUpdates: true
