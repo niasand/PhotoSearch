@@ -31,46 +31,49 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # ── Build unsigned (debug) APK ──
       - name: Build debug APK
-        env:
-          SILICON_FLOW_API_KEY: ${{ secrets.SILICON_FLOW_API_KEY }}
         run: ./gradlew assembleDebug
 
-      - name: Upload unsigned APK artifact
+      - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: thingspath-unsigned
-          path: app/build/outputs/apk/debug/thingspath-unsigned.apk
+          name: photosearch-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
 
-      # ── Build signed (release) APK ──
+      - name: Build release APK
+        run: ./gradlew assembleRelease
+
+      - name: Upload release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: photosearch-release-unsigned
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
+
       - name: Decode keystore
         if: env.HAS_KEYSTORE != ''
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/keystore.jks
 
-      - name: Build release APK
+      - name: Build signed release APK
         if: env.HAS_KEYSTORE != ''
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/keystore.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          SILICON_FLOW_API_KEY: ${{ secrets.SILICON_FLOW_API_KEY }}
         run: ./gradlew assembleRelease
 
       - name: Upload signed APK artifact
         if: env.HAS_KEYSTORE != ''
         uses: actions/upload-artifact@v4
         with:
-          name: thingspath-signed
-          path: app/build/outputs/apk/release/thingspath-signed.apk
+          name: photosearch-release-signed
+          path: app/build/outputs/apk/release/app-release.apk
 
       # ── Create GitHub Release ──
       - name: Get version name
         id: version
         run: |
-          # Robust extraction for KTS: find 'versionName' and extract value between quotes
           VERSION=$(grep 'versionName' app/build.gradle.kts | head -1 | awk -F'"' '{print $2}')
           if [ -z "$VERSION" ]; then VERSION="1.0.0"; fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -78,26 +81,30 @@ jobs:
       - name: Prepare release assets
         id: assets
         run: |
-          # Use find to locate the specific APKs we renamed
-          FILES=$(find app/build/outputs/apk -name "thingspath-*.apk" | xargs echo | sed 's/ /,/g')
+          FILES=$(find app/build/outputs/apk -name "app-*.apk" | xargs echo | sed 's/ /,/g')
+          if [ -z "$FILES" ]; then
+            echo "No APKs found in app/build/outputs/apk" >&2
+            exit 1
+          fi
           echo "files=$FILES" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
           tag: v${{ steps.version.outputs.version }}-build.${{ github.run_number }}
-          name: ThingsPath v${{ steps.version.outputs.version }} (Build ${{ github.run_number }})
+          name: PhotoSearch v${{ steps.version.outputs.version }} (Build ${{ github.run_number }})
           artifacts: ${{ steps.assets.outputs.files }}
           body: |
-            ## ThingsPath v${{ steps.version.outputs.version }}
+            ## PhotoSearch v${{ steps.version.outputs.version }}
 
             **Build:** #${{ github.run_number }}
             **Commit:** ${{ github.sha }}
             **Branch:** ${{ github.ref_name }}
 
             ### Downloads
-            - 📦 `thingspath-unsigned.apk` — Debug build (未签名)
-            - 🔐 `thingspath-signed.apk` — Release build (已签名)
+            - 📦 `app-debug.apk` — Debug build (未签名)
+            - 🔐 `app-release.apk` — Release build (已签名，如启用 keystore)
+            - 📦 `app-release-unsigned.apk` — Release build (未签名)
           makeLatest: true
           allowUpdates: true
           token: ${{ secrets.GITHUB_TOKEN }}
